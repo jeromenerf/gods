@@ -13,40 +13,44 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"io/ioutil"
+	"log"
 	"os"
 	"os/exec"
 	"runtime"
-	"strconv"
 	"strings"
 	"time"
 )
 
 const (
-	bpsSign   = "á"
-	kibpsSign = "â"
-	mibpsSign = "ã"
+	bpsSign   = "B"
+	kibpsSign = "kB"
+	mibpsSign = "MB"
 
-	unpluggedSign = "è"
-	pluggedSign   = "é"
+	unpluggedSign = "↓"
+	pluggedSign   = "↑"
 
-	cpuSign = "Ï"
-	memSign = "Þ"
+	cpuSign = "C"
+	memSign = "M"
 
-	netReceivedSign    = "Ð"
-	netTransmittedSign = "Ñ"
+	audioSign = "♫"
 
-	floatSeparator = "à"
-	dateSeparator  = "Ý"
-	fieldSeparator = "û"
+	netReceivedSign    = "↓"
+	netTransmittedSign = "↑"
+
+	floatSeparator = ","
+	dateSeparator  = ""
+	fieldSeparator = "  -  "
 )
 
 var (
 	netDevs = map[string]struct{}{
-		"eth0:": {},
-		"eth1:": {},
+		"eth0:":  {},
+		"eth1:":  {},
+		"eth2:":  {},
 		"wlan0:": {},
-		"ppp0:": {},
+		"wlan1:": {},
+		"wlan2:": {},
+		"ppp0:":  {},
 	}
 	cores = runtime.NumCPU() // count of cores to scale cpu usage
 	rxOld = 0
@@ -78,9 +82,9 @@ func fixed(pre string, rate int) string {
 	if spd >= 100 {
 		formated = fmt.Sprintf("%3.0f", spd)
 	} else if spd >= 10 {
-		formated = fmt.Sprintf("%4.1f", spd)
+		formated = fmt.Sprintf("%3.0f", spd)
 	} else {
-		formated = fmt.Sprintf(" %3.1f", spd)
+		formated = fmt.Sprintf("%2.1f", spd)
 	}
 	return pre + strings.Replace(formated, ".", floatSeparator, 1) + suf
 }
@@ -121,120 +125,45 @@ func colored(icon string, percentage int) string {
 
 // updatePower reads the current battery and power plug status
 func updatePower() string {
-	const powerSupply = "/sys/class/power_supply/"
-	var enFull, enNow, enPerc int = 0, 0, 0
-	var plugged, err = ioutil.ReadFile(powerSupply + "AC/online")
+	icon := pluggedSign
+	lvl, err := exec.Command("sh", "-c", `acpi -b | awk -F '[ ,]' -vORS='' '{print $5, $7}'`).Output()
 	if err != nil {
-		return "ÏERR"
+		log.Println(err)
 	}
-	batts, err := ioutil.ReadDir(powerSupply)
-	if err != nil {
-		return "ÏERR"
+	if len(lvl) > 4 {
+		icon = unpluggedSign
 	}
-
-	readval := func(name, field string) int {
-		var path = powerSupply + name + "/"
-		var file []byte
-		if tmp, err := ioutil.ReadFile(path + "energy_" + field); err == nil {
-			file = tmp
-		} else if tmp, err := ioutil.ReadFile(path + "charge_" + field); err == nil {
-			file = tmp
-		} else {
-			return 0
-		}
-
-		if ret, err := strconv.Atoi(strings.TrimSpace(string(file))); err == nil {
-			return ret
-		}
-		return 0
-	}
-
-	for _, batt := range batts {
-		name := batt.Name()
-		if !strings.HasPrefix(name, "BAT") {
-			continue
-		}
-
-		enFull += readval(name, "full")
-		enNow += readval(name, "now")
-	}
-
-	if enFull == 0 { // Battery found but no readable full file.
-		return "ÏERR"
-	}
-
-	enPerc = enNow * 100 / enFull
-	var icon = unpluggedSign
-	if string(plugged) == "1\n" {
-		icon = pluggedSign
-	}
-
-	if enPerc <= 5 {
-		return fmt.Sprintf("%s%3d", icon, enPerc)
-	} else if enPerc <= 10 {
-		return fmt.Sprintf("%s%3d", icon, enPerc)
-	}
-	return fmt.Sprintf("%s%3d", icon, enPerc)
+	return fmt.Sprintf("%s%s", icon, lvl)
 }
 
-// updateCPUUse reads the last minute sysload and scales it to the core count
-func updateCPUUse() string {
-	var load float32
-	var loadavg, err = ioutil.ReadFile("/proc/loadavg")
-	if err != nil {
-		return cpuSign + "ERR"
-	}
-	_, err = fmt.Sscanf(string(loadavg), "%f", &load)
-	if err != nil {
-		return cpuSign + "ERR"
-	}
-	return colored(cpuSign, int(load*100.0/float32(cores)))
+// updateDateTime returns the current datetime
+func updateDateTime() string {
+	return time.Now().Local().Format("Mon 02 Jan 2006" + dateSeparator + " 15:04:05")
 }
 
-// updateMemUse reads the memory used by applications and scales to [0, 100]
-func updateMemUse() string {
-	var file, err = os.Open("/proc/meminfo")
+//updateAudioVolume returns the current audio mute status and Master volume
+func updateAudioVolume() string {
+	vol, err := exec.Command("sh", "-c", `amixer -c0 sget Master | awk -vORS='' '/Mono:/ {print($4)}' | tr -d '[]'`).Output()
 	if err != nil {
-		return memSign + "ERR"
+		log.Println(err)
 	}
-	defer file.Close()
-
-	// done must equal the flag combination (0001 | 0010 | 0100 | 1000) = 15
-	var total, used, done = 0, 0, 0
-	for info := bufio.NewScanner(file); done != 15 && info.Scan(); {
-		var prop, val = "", 0
-		if _, err = fmt.Sscanf(info.Text(), "%s %d", &prop, &val); err != nil {
-			return memSign + "ERR"
-		}
-		switch prop {
-		case "MemTotal:":
-			total = val
-			used += val
-			done |= 1
-		case "MemFree:":
-			used -= val
-			done |= 2
-		case "Buffers:":
-			used -= val
-			done |= 4
-		case "Cached:":
-			used -= val
-			done |= 8
-		}
+	_, err = exec.Command("sh", "-c", `amixer -c0 sget Master | grep -c '\[on\]'`).Output()
+	if err != nil {
+		vol = []byte("[mute]")
 	}
-	return colored(memSign, used*100/total)
+	return audioSign + string(vol)
 }
 
 // main updates the dwm statusbar every second
 func main() {
 	for {
 		var status = []string{
-			"",
 			updateNetUse(),
-			updateCPUUse(),
-			updateMemUse(),
+			//updateCPUUse(),
+			//updateMemUse(),
 			updatePower(),
-			time.Now().Local().Format("Mon 02 " + dateSeparator + " 15:04:05"),
+			updateAudioVolume(),
+			updateDateTime(),
 		}
 		exec.Command("xsetroot", "-name", strings.Join(status, fieldSeparator)).Run()
 
