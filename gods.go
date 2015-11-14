@@ -143,11 +143,11 @@ func updateDateTime() string {
 
 //updateAudioVolume returns the current audio mute status and Master volume
 func updateAudioVolume() string {
-	vol, err := exec.Command("sh", "-c", `amixer -c0 sget Master | awk -vORS='' '/Mono:/ {print($4)}' | tr -d '[]'`).Output()
+	vol, err := exec.Command("sh", "-c", `amixer sget Master | awk -vORS='' '/Left:/ {print($5)}' | tr -d '[]'`).Output()
 	if err != nil {
 		log.Println(err)
 	}
-	_, err = exec.Command("sh", "-c", `amixer -c0 sget Master | grep -c '\[on\]'`).Output()
+	_, err = exec.Command("sh", "-c", `amixer sget Master | grep -c '\[on\]'`).Output()
 	if err != nil {
 		vol = []byte("[mute]")
 	}
