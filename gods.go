@@ -138,7 +138,7 @@ func updatePower() string {
 
 // updateDateTime returns the current datetime
 func updateDateTime() string {
-	return time.Now().Local().Format("Mon 02 Jan 2006" + dateSeparator + " 15:04:05")
+	return time.Now().Local().Format("Mon 02 Jan 2006" + dateSeparator + " 15:04")
 }
 
 //updateAudioVolume returns the current audio mute status and Master volume
@@ -168,7 +168,6 @@ func main() {
 		exec.Command("xsetroot", "-name", strings.Join(status, fieldSeparator)).Run()
 
 		// sleep until beginning of next second
-		var now = time.Now()
-		time.Sleep(now.Truncate(time.Second).Add(time.Second).Sub(now))
+		time.Sleep(5 * time.Second)
 	}
 }
