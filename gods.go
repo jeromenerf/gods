@@ -166,6 +166,7 @@ func main() {
 			updateDateTime(),
 		}
 		exec.Command("xsetroot", "-name", strings.Join(status, fieldSeparator)).Run()
+		fmt.Println(strings.Join(status, fieldSeparator))
 
 		// sleep until beginning of next second
 		time.Sleep(5 * time.Second)
