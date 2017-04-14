@@ -26,16 +26,16 @@ const (
 	kibpsSign = "kB"
 	mibpsSign = "MB"
 
-	unpluggedSign = "↓"
-	pluggedSign   = "↑"
+	unpluggedSign = "BATT:"
+	pluggedSign   = "AC:"
 
 	cpuSign = "C"
 	memSign = "M"
 
-	audioSign = "♫"
+	audioSign = "a:"
 
-	netReceivedSign    = "↓"
-	netTransmittedSign = "↑"
+	netReceivedSign    = "d:"
+	netTransmittedSign = "u:"
 
 	floatSeparator = ","
 	dateSeparator  = ""
@@ -44,13 +44,14 @@ const (
 
 var (
 	netDevs = map[string]struct{}{
-		"eth0:":  {},
-		"eth1:":  {},
-		"eth2:":  {},
-		"wlan0:": {},
-		"wlan1:": {},
-		"wlan2:": {},
-		"ppp0:":  {},
+		"eth0:":   {},
+		"eth1:":   {},
+		"eth2:":   {},
+		"wlan0:":  {},
+		"wlan1:":  {},
+		"wlan2:":  {},
+		"ppp0:":   {},
+		"wlp3s0:": {},
 	}
 	cores = runtime.NumCPU() // count of cores to scale cpu usage
 	rxOld = 0
@@ -95,7 +96,12 @@ func updateNetUse() string {
 	if err != nil {
 		return netReceivedSign + " ERR " + netTransmittedSign + " ERR"
 	}
-	defer file.Close()
+	defer func() {
+		err = file.Close()
+		if err != nil {
+			fmt.Println(err)
+		}
+	}()
 
 	var void = 0 // target for unused values
 	var dev, rx, tx, rxNow, txNow = "", 0, 0, 0, 0
@@ -165,10 +171,10 @@ func main() {
 			updateAudioVolume(),
 			updateDateTime(),
 		}
-		exec.Command("xsetroot", "-name", strings.Join(status, fieldSeparator)).Run()
+		// exec.Command("xsetroot", "-name", strings.Join(status, fieldSeparator)).Run()
 		fmt.Println(strings.Join(status, fieldSeparator))
 
 		// sleep until beginning of next second
-		time.Sleep(5 * time.Second)
+		time.Sleep(1 * time.Second)
 	}
 }
